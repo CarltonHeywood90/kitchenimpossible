@@ -1,1 +1,25 @@
-"Frontend placeholder" 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kitchen Impossible Frontend</title>
+</head>
+<body>
+    <h1>Welcome to Kitchen Impossible!</h1>
+    <p>The frontend is running.</p>
+    <button id="testBtn">Test Backend</button>
+
+    <script>
+        document.getElementById('testBtn').addEventListener('click', async () => {
+            try {
+                const res = await fetch('http://localhost:4000/api/test');
+                const data = await res.json();
+                alert(JSON.stringify(data));
+            } catch (err) {
+                alert('Error connecting to backend: ' + err);
+            }
+        });
+    </script>
+</body>
+</html>
