@@ -1,25 +1,241 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kitchen Impossible Frontend</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kitchen Impossible</title>
+  <style>
+    .card { display: inline-block; padding: 10px; margin: 5px; border: 1px solid #333; border-radius: 5px; cursor: pointer; }
+    .selected { background: #ddd; }
+    .course-tier { margin-left: 20px; }
+    #rulesModal { display: none; border: 1px solid #000; padding: 10px; max-height: 300px; overflow: auto; position: fixed; top: 20%; left: 50%; transform: translateX(-50%); background: #fff; z-index: 1000; }
+    #rulesModal button { margin-bottom: 10px; }
+  </style>
 </head>
 <body>
-    <h1>Welcome to Kitchen Impossible!</h1>
-    <p>The frontend is running.</p>
-    <button id="testBtn">Test Backend</button>
+  <h1>Kitchen Impossible</h1>
 
-    <script>
-        document.getElementById('testBtn').addEventListener('click', async () => {
-            try {
-                const res = await fetch('http://localhost:4000/api/test');
-                const data = await res.json();
-                alert(JSON.stringify(data));
-            } catch (err) {
-                alert('Error connecting to backend: ' + err);
-            }
+  <!-- Join Game -->
+  <div>
+    <input type="text" id="player-name" placeholder="Enter your name">
+    <button id="join-btn">Join Game</button>
+  </div>
+
+  <!-- Player Hand -->
+  <h2>Your Hand</h2>
+  <div id="hand"></div>
+
+  <!-- Course/Tier Selection -->
+  <h2>Select Course & Tier</h2>
+  <div id="course-selection"></div>
+
+  <button id="submit-btn">Submit Selected Cards</button>
+
+  <!-- Round Submissions -->
+  <h2>Round Submissions</h2>
+  <div id="submissions"></div>
+
+  <!-- Full Menu -->
+  <h2>Full Menu</h2>
+  <div id="menu"></div>
+
+  <!-- Rules Modal -->
+  <button id="rulesBtn">Show Rules</button>
+  <div id="rulesModal">
+    <button id="closeRules">Close</button>
+    <pre id="rulesContent"></pre>
+  </div>
+
+  <script>
+    const BACKEND = 'http://localhost:4000';
+    let playerId = null;
+    let selectedCards = [];
+    let fullMenu = null;
+    let selectedCourse = null;
+    let selectedTier = null;
+
+    const handDiv = document.getElementById('hand');
+    const submissionsDiv = document.getElementById('submissions');
+    const menuDiv = document.getElementById('menu');
+    const courseSelectionDiv = document.getElementById('course-selection');
+
+    // ----------------------
+    // Join Game
+    // ----------------------
+    document.getElementById('join-btn').addEventListener('click', async () => {
+      const name = document.getElementById('player-name').value.trim();
+      if (!name) return alert("Enter a name");
+      try {
+        const res = await fetch(`${BACKEND}/api/join`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
         });
-    </script>
+        const data = await res.json();
+        if (data.error) return alert(data.error);
+        playerId = data.playerId;
+        renderHand(data.hand);
+      } catch (err) { console.error(err); alert("Failed to join game"); }
+    });
+
+    // ----------------------
+    // Render Hand
+    // ----------------------
+    function renderHand(hand) {
+      handDiv.innerHTML = '';
+      selectedCards = [];
+      hand.forEach((card, index) => {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'card';
+        cardEl.textContent = card.type;
+        cardEl.addEventListener('click', () => {
+          if (selectedCards.includes(index)) {
+            selectedCards = selectedCards.filter(i => i !== index);
+            cardEl.classList.remove('selected');
+          } else {
+            selectedCards.push(index);
+            cardEl.classList.add('selected');
+          }
+        });
+        handDiv.appendChild(cardEl);
+      });
+    }
+
+    // ----------------------
+    // Fetch Full Menu
+    // ----------------------
+    async function fetchFullMenu() {
+      try {
+        const res = await fetch(`${BACKEND}/api/menu/full`);
+        fullMenu = await res.json();
+        renderFullMenu();
+        renderCourseSelection();
+      } catch (err) { console.error(err); }
+    }
+
+    function renderFullMenu() {
+      menuDiv.innerHTML = '';
+      for (const course in fullMenu) {
+        const tiers = fullMenu[course];
+        const courseDiv = document.createElement('div');
+        courseDiv.innerHTML = `<strong>${course}</strong>`;
+        tiers.forEach(t => {
+          const tierDiv = document.createElement('div');
+          tierDiv.className = 'course-tier';
+          tierDiv.innerHTML = `<em>${t.tier}</em> - $${t.salePrice} | Ingredients: ${Object.entries(t.ingredientsRequired).map(([k,v])=>`${k}: ${v}`).join(', ')}`;
+          courseDiv.appendChild(tierDiv);
+        });
+        menuDiv.appendChild(courseDiv);
+      }
+    }
+
+    // ----------------------
+    // Render Course/Tier Selection
+    // ----------------------
+    function renderCourseSelection() {
+      courseSelectionDiv.innerHTML = '';
+      for (const course in fullMenu) {
+        const courseDiv = document.createElement('div');
+        courseDiv.innerHTML = `<strong>${course}</strong>`;
+        fullMenu[course].forEach(t => {
+          const label = document.createElement('label');
+          label.style.marginLeft = '20px';
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'courseTier';
+          radio.value = `${course}|${t.tier}`;
+          radio.addEventListener('change', () => {
+            [selectedCourse, selectedTier] = radio.value.split('|');
+          });
+          label.appendChild(radio);
+          label.appendChild(document.createTextNode(` ${t.tier} - $${t.salePrice}`));
+          courseDiv.appendChild(label);
+        });
+        courseSelectionDiv.appendChild(courseDiv);
+      }
+    }
+
+    // ----------------------
+    // Submit Cards
+    // ----------------------
+    document.getElementById('submit-btn').addEventListener('click', async () => {
+      if (!playerId) return alert("Join first");
+      if (!selectedCourse || !selectedTier) return alert("Select a course and tier");
+      if (selectedCards.length === 0) return alert("Select cards to submit");
+
+      const cards = selectedCards.map(i => ({ type: handDiv.children[i].textContent }));
+      const requiredIngredients = fullMenu[selectedCourse].find(t => t.tier === selectedTier).ingredientsRequired;
+
+      // Validate
+      const counts = {};
+      cards.forEach(c => counts[c.type] = (counts[c.type]||0)+1);
+      let valid = true;
+      for (const [ing, qty] of Object.entries(requiredIngredients)) {
+        if ((counts[ing] || 0) < qty) valid = false;
+      }
+      if (!valid) return alert("Selected cards do not meet the required ingredients for this course/tier");
+
+      // Submit
+      try {
+        const res = await fetch(`${BACKEND}/api/submit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playerId, course: selectedCourse, tier: selectedTier, cards })
+        });
+        const data = await res.json();
+        if (!data.success) return alert(data.error || "Failed to submit cards");
+
+        // Update hand
+        const remainingHand = [];
+        Array.from(handDiv.children).forEach((child, i) => {
+          if (!selectedCards.includes(i)) remainingHand.push({ type: child.textContent });
+        });
+        renderHand(remainingHand);
+        selectedCards = [];
+        fetchSubmissions();
+      } catch (err) { console.error(err); alert("Failed to submit cards"); }
+    });
+
+    // ----------------------
+    // Submissions
+    // ----------------------
+    async function fetchSubmissions() {
+      try {
+        const res = await fetch(`${BACKEND}/api/round/1`);
+        const data = await res.json();
+        renderSubmissions(data.submissions);
+      } catch (err) { console.error(err); }
+    }
+
+    function renderSubmissions(subs) {
+      submissionsDiv.innerHTML = '';
+      subs.forEach(sub => {
+        const p = document.createElement('p');
+        p.textContent = `Player ${sub.playerId} submitted for ${sub.course} (${sub.tier}): ${sub.cards.map(c=>c.type).join(', ')}`;
+        submissionsDiv.appendChild(p);
+      });
+    }
+
+    // ----------------------
+    // Rules Modal
+    // ----------------------
+    document.getElementById('rulesBtn').addEventListener('click', async () => {
+      document.getElementById('rulesModal').style.display = 'block';
+      try {
+        const res = await fetch(`${BACKEND}/api/menu/rules`);
+        const data = await res.json();
+        document.getElementById('rulesContent').innerText = data.rulesText;
+      } catch (err) { console.error(err); }
+    });
+    document.getElementById('closeRules').addEventListener('click', () => {
+      document.getElementById('rulesModal').style.display = 'none';
+    });
+
+    // ----------------------
+    // Initial Fetch
+    // ----------------------
+    fetchFullMenu();
+    fetchSubmissions();
+  </script>
 </body>
 </html>

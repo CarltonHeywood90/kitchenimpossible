@@ -1,32 +1,36 @@
 version: '3.8'
 
 services:
+  mysql:
+    image: mysql:8
+    container_name: kitchen-mysql
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - kitchenimpossible_mysql-data:/var/lib/mysql
+
   backend:
     build: ./backend
+    container_name: kitchen-backend
     ports:
       - "4000:4000"
     environment:
       - DB_HOST=mysql
+      - DB_PORT=3306
       - DB_USER=root
-      - DB_PASSWORD=example
-      - DB_NAME=kitchen_db
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
     depends_on:
       - mysql
 
   frontend:
     build: ./frontend
+    container_name: kitchen-frontend
     ports:
-      - "3000:3000"
-
-  mysql:
-    image: mysql:8
-    environment:
-      MYSQL_ROOT_PASSWORD: example
-      MYSQL_DATABASE: kitchen_db
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql-data:/var/lib/mysql
+      - "3000:80"
+    depends_on:
+      - backend
 
 volumes:
-  mysql-data:
+  kitchenimpossible_mysql-data:

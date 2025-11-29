@@ -1,16 +1,13 @@
-# Use Node.js LTS
 FROM node:20
 
 WORKDIR /app
 
-# Copy package files if you have them, otherwise just copy everything
+# Copy package files first to install dependencies
+COPY package*.json ./
+RUN npm install
+
+# Copy rest of the backend files
 COPY . .
 
-# Install dependencies if package.json exists
-RUN if [ -f package.json ]; then npm install; fi
-
-# Expose port 4000
 EXPOSE 4000
-
-# Start server
 CMD ["node", "server.js"]
